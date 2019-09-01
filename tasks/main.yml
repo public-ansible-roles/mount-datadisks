@@ -1,0 +1,54 @@
+---
+# tasks file for mount-datadisks
+- name: find all disk devices for data disks
+  find:
+    paths: /dev
+    file_type: any
+    patterns: "^sd[c-z]$"
+    use_regex: yes
+  register: found_devices
+
+- name: create a new primary partition
+  parted:
+    device: "{{ item.path }}"
+    number: 1
+    label: "gpt"
+    state: present
+  with_items: "{{ found_devices.files }}"
+
+- name: find all disk partitions for data disks
+  find:
+    paths: /dev
+    file_type: any
+    patterns: "^sd[c-z]1$"
+    use_regex: yes
+  register: found_partitions
+
+- name: make filesystem
+  filesystem:
+    fstype: xfs
+    dev: "{{ item.path }}"
+    resizefs: yes
+  with_items: "{{ found_partitions.files }}"
+
+- name: get blkid
+  shell: 'blkid {{ item.path }} | awk -F\" ''{ print $2 }'' '
+  with_items: "{{ found_partitions.files }}"
+  register: uuid
+
+- name: mkdir mount_points
+  file:
+   path: "{{item }}"
+   state: directory
+  with_items: "{{ mount_points  }}"
+
+- name: mount
+  mount:
+    name: "{{ item.0 }}"
+    src: "UUID={{ item.1.stdout }}"
+    fstype: "{{ file_system }}"
+    opts: defaults,nofail
+    state: mounted
+  with_together:
+    - "{{ mount_points  }}"
+    - "{{ uuid.results }}"

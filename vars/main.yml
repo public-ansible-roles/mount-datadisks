@@ -1,0 +1,3 @@
+---
+# vars file for mount-datadisks
+file_system: xfs
